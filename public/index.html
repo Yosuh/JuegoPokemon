@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Combate Pokémon</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- Información del turno -->
+    <div id="turn-info">
+      <h2 id="turn-counter">Turno: 1</h2>
+    </div>
+
+    <!-- Área de combate -->
+    <div id="battle-area">
+      <!-- Barra de vida del oponente -->
+      <div class="health-container" id="opponent-health-container">
+        <div class="health-bar" id="opponent-health-bar"></div>
+      </div>
+      <img id="opponent-sprite" src="/images/opponent-pokemon1.png" alt="Oponente" class="sprite">
+
+      <!-- Barra de vida del jugador -->
+      <div class="health-container" id="player-health-container">
+        <div class="health-bar" id="player-health-bar"></div>
+      </div>
+      <img id="player-sprite" src="/images/player-pokemon1.png" alt="Jugador" class="sprite">
+    </div>
+
+    <!-- Menús -->
+    <div id="menu-area">
+      <!-- Menú principal -->
+      <div id="main-menu">
+        <button id="attack-button">Atacar (X)</button>
+        <button id="switch-button">Cambiar Pokémon (C)</button>
+      </div>
+
+      <!-- Menú de ataques -->
+      <div id="attack-menu" class="hidden">
+        <button class="attack-option" data-move="1">Movimiento 1 (1)</button>
+        <button class="attack-option" data-move="2">Movimiento 2 (2)</button>
+        <button class="attack-option" data-move="3">Movimiento 3 (3)</button>
+        <button class="attack-option" data-move="4">Movimiento 4 (4)</button>
+      </div>
+
+      <!-- Menú de cambio -->
+      <div id="switch-menu" class="hidden">
+        <button class="switch-option" data-pokemon="0">Pokémon 1 (I)</button>
+        <button class="switch-option" data-pokemon="1">Pokémon 2 (O)</button>
+        <button class="switch-option" data-pokemon="2">Pokémon 3 (P)</button>
+      </div>
+    </div>
+
+    <!-- Registro de acciones -->
+    <div id="log-area">
+      <ul id="log-list"></ul>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    let gameId = '';  // ID de la partida
+    let playerId = ''; // ID del jugador
+
+    // Unirse a una partida
+    socket.emit('join-game', 'game1');  // Suponemos que 'game1' es el ID de la partida
+
+    socket.on('game-joined', ({ gameId: gId, playerId: pId }) => {
+      gameId = gId;
+      playerId = pId;
+      console.log(`Juego unido: ${gameId}, Jugador: ${playerId}`);
+    });
+
+    socket.on('game-started', ({ turn }) => {
+      document.getElementById('turn-counter').innerText = `Turno: ${turn}`;
+      console.log('Juego iniciado');
+      updateHealthBars();  // Inicializamos las barras de salud
+    });
+
+    // Actualizar el estado del jugador
+    socket.on('update-state', (data) => {
+      const { isPlayer, pokemon, activePokemonIndex } = data;
+
+      if (isPlayer) {
+        updateHealthBars(pokemon, activePokemonIndex, 'player');
+      } else {
+        updateHealthBars(pokemon, activePokemonIndex, 'opponent');
+      }
+    });
+
+    // Actualizar la barra de vida de los Pokémon
+    function updateHealthBars(pokemon, activePokemonIndex, playerType) {
+      const healthBarElement = document.getElementById(`${playerType}-health-bar`);
+      const healthValue = pokemon[activePokemonIndex].hp;
+
+      const percentage = (healthValue / 100) * 100;
+      healthBarElement.style.width = `${percentage}%`;
+
+      // Cambiar el color según el porcentaje de vida
+      if (percentage > 50) {
+        healthBarElement.style.backgroundColor = "#4caf50";  // Verde
+      } else if (percentage > 25) {
+        healthBarElement.style.backgroundColor = "#ffeb3b";  // Amarillo
+      } else {
+        healthBarElement.style.backgroundColor = "#f44336";  // Rojo
+      }
+    }
+
+    // Mostrar el resultado de un turno
+    socket.on('turn-result', (data) => {
+      const { yourResult, opponentResult } = data;
+
+      const logList = document.getElementById('log-list');
+      logList.innerHTML = '';  // Limpiar el log
+
+      const yourLog = document.createElement('li');
+      yourLog.textContent = yourResult.message;
+      logList.appendChild(yourLog);
+
+      const opponentLog = document.createElement('li');
+      opponentLog.textContent = opponentResult.message;
+      logList.appendChild(opponentLog);
+    });
+
+    // Mostrar el cambio de turno
+    socket.on('turn-update', ({ turn }) => {
+      document.getElementById('turn-counter').innerText = `Turno: ${turn}`;
+    });
+
+    // Menú de ataque
+    document.getElementById('attack-button').addEventListener('click', () => {
+      document.getElementById('attack-menu').classList.toggle('hidden');
+      document.getElementById('switch-menu').classList.add('hidden');
+    });
+
+    // Menú de cambio de Pokémon
+    document.getElementById('switch-button').addEventListener('click', () => {
+      document.getElementById('switch-menu').classList.toggle('hidden');
+      document.getElementById('attack-menu').classList.add('hidden');
+    });
+
+    // Selección de movimiento para atacar
+    const attackButtons = document.querySelectorAll('.attack-option');
+    attackButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const moveIndex = button.getAttribute('data-move');
+        socket.emit('player-action', {
+          type: 'attack',
+          data: { moveIndex: parseInt(moveIndex) - 1 },
+        });
+      });
+    });
+
+    // Selección de Pokémon para cambiar
+    const switchButtons = document.querySelectorAll('.switch-option');
+    switchButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const pokemonIndex = button.getAttribute('data-pokemon');
+        socket.emit('player-action', {
+          type: 'switch',
+          data: { index: parseInt(pokemonIndex) },
+        });
+      });
+    });
+  </script>
+</body>
+</html>
